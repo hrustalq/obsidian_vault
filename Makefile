@@ -19,6 +19,8 @@ UMASK=0022; \
 TZ=Asia/Shanghai; \
 COUCHDB_USER=obsidian_user; \
 COUCHDB_PASSWORD=your_secure_password_here; \
+COUCHDB_CORS_ORIGINS=*; \
+COUCHDB_DOMAIN=localhost; \
 EOF; \
 			echo "Created .env file with default values"; \
 		fi; \

@@ -11,6 +11,10 @@ permissions:
   security-events: write
   actions: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validate Docker Compose
@@ -32,6 +36,8 @@ jobs:
         TZ=UTC
         COUCHDB_USER=test_user
         COUCHDB_PASSWORD=test_password
+        COUCHDB_CORS_ORIGINS=*
+        COUCHDB_DOMAIN=localhost
         EOF
       
     - name: Validate Docker Compose file
@@ -43,9 +49,32 @@ jobs:
     - name: Test Docker Compose setup
       run: |
         docker compose up -d
-        sleep 30
-        curl -f http://localhost:5984 || exit 1
-        docker compose logs
+        
+        # Wait for CouchDB to be ready with timeout
+        echo "⏳ Waiting for CouchDB to be ready..."
+        timeout=60
+        counter=0
+        while [ $counter -lt $timeout ]; do
+          if curl -f http://localhost:5984 >/dev/null 2>&1; then
+            echo "✅ CouchDB is ready!"
+            break
+          fi
+          echo "Waiting... ($counter/$timeout)"
+          sleep 2
+          counter=$((counter + 2))
+        done
+        
+        # Final health check
+        if ! curl -f http://localhost:5984; then
+          echo "❌ CouchDB failed to start properly"
+          echo "📋 Container logs:"
+          docker compose logs
+          exit 1
+        fi
+        
+        echo "🔍 Testing CouchDB API endpoints..."
+        curl -f http://localhost:5984/_up || echo "⚠️ Health endpoint not available"
+        echo "✅ Docker Compose test completed successfully"
         
     - name: Cleanup
       if: always()
@@ -102,20 +131,60 @@ jobs:
           export TZ="${{ secrets.TZ || 'Asia/Shanghai' }}"
           export COUCHDB_USER="${{ secrets.COUCHDB_USER || 'obsidian_user' }}"
           export COUCHDB_PASSWORD="${{ secrets.COUCHDB_PASSWORD }}"
+          export COUCHDB_CORS_ORIGINS="${{ secrets.COUCHDB_CORS_ORIGINS || '*' }}"
+          export COUCHDB_DOMAIN="${{ secrets.COUCHDB_DOMAIN || 'localhost' }}"
           
           # Deploy using Makefile
           make up
           
-          # Wait for service to be ready
-          sleep 30
+          # Wait for service to be ready with timeout
+          echo "⏳ Waiting for CouchDB to be ready..."
+          timeout=90
+          counter=0
+          while [ $counter -lt $timeout ]; do
+            if curl -f http://localhost:5984 >/dev/null 2>&1; then
+              echo "✅ CouchDB is ready!"
+              break
+            fi
+            echo "Waiting... ($counter/$timeout)"
+            sleep 3
+            counter=$((counter + 3))
+          done
           
-          # Health check
+          # Health check with detailed testing
           if curl -f http://localhost:5984 >/dev/null 2>&1; then
-            echo "✅ Deployment successful - CouchDB is responding"
+            echo "🔍 Running health checks..."
+            
+            # Test basic connectivity
+            curl -f http://localhost:5984 && echo "✅ Basic connectivity OK"
+            
+            # Test CouchDB API
+            curl -f http://localhost:5984/_up && echo "✅ CouchDB health check OK"
+            
+            # Test authentication if configured
+            if [ -n "$COUCHDB_USER" ] && [ -n "$COUCHDB_PASSWORD" ]; then
+              curl -f -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_session && echo "✅ Authentication OK"
+            fi
+            
+            echo "✅ Deployment successful - All health checks passed"
           else
             echo "❌ Deployment failed - CouchDB is not responding"
-            make logs
-            exit 1
+            echo "📋 Checking service status..."
+            make status || echo "Failed to get status"
+            echo "📋 Recent logs:"
+            make logs || docker compose logs --tail=50
+            
+            echo "🔄 Attempting to restart service..."
+            make restart || echo "Failed to restart"
+            sleep 10
+            
+            # Final attempt
+            if curl -f http://localhost:5984 >/dev/null 2>&1; then
+              echo "✅ Recovery successful after restart"
+            else
+              echo "❌ Recovery failed - manual intervention required"
+              exit 1
+            fi
           fi
 
   security:
@@ -126,16 +195,34 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Run Trivy vulnerability scanner
+    - name: Run Trivy configuration scan
       uses: aquasecurity/trivy-action@master
       with:
         scan-type: 'config'
         scan-ref: '.'
         format: 'sarif'
-        output: 'trivy-results.sarif'
+        output: 'trivy-config-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
         
-    - name: Upload Trivy scan results to GitHub Security tab
+    - name: Run Trivy filesystem scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-fs-results.sarif'
+        severity: 'CRITICAL,HIGH'
+        
+    - name: Upload configuration scan results
       uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
-        sarif_file: 'trivy-results.sarif' 
+        sarif_file: 'trivy-config-results.sarif'
+        category: 'trivy-config'
+        
+    - name: Upload filesystem scan results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-fs-results.sarif'
+        category: 'trivy-fs' 

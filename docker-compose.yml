@@ -11,13 +11,74 @@ services:
       - TZ=${TZ:-Asia/Shanghai}
       - COUCHDB_USER=${COUCHDB_USER:-obsidian_user}
       - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
+      - COUCHDB_DOMAIN=${COUCHDB_DOMAIN:-localhost}
+      # === HTTPS Domain Setup Configuration ===
+      # Bind to all interfaces (0.0.0.0) to allow external connections through reverse proxy
+      - COUCHDB_BIND_ADDRESS=0.0.0.0
+      # Enable CORS for web applications accessing CouchDB through your domain
+      - COUCHDB_CORS_ENABLE=true
+      # Set allowed CORS origins from environment variable
+      - COUCHDB_CORS_ORIGINS=${COUCHDB_CORS_ORIGINS:-https://couchdb.yourdomain.com,https://yourdomain.com}
+      # Enable authentication (required for security when exposing to internet)
+      - COUCHDB_REQUIRE_VALID_USER=true
+      # Disable admin party mode (security requirement)
+      - COUCHDB_ADMIN_PARTY=false
+      # Set logging level (useful for debugging connection issues)
+      - COUCHDB_LOG_LEVEL=info
     volumes:
       - /mnt/user/appdata/couchdb-obsidian-livesync/data:/opt/couchdb/data
       - /mnt/user/appdata/couchdb-obsidian-livesync/etc/local.d:/opt/couchdb/etc/local.d
+      # Mount custom configuration file for additional HTTPS/domain settings
+      - /mnt/user/appdata/couchdb-obsidian-livesync/etc/local.ini:/opt/couchdb/etc/local.ini
     ports:
-      - "5984:5984"
+      - "5984:5984"  # CouchDB HTTP port - will be proxied through Cloudflare
     restart: unless-stopped
+    # === Security Headers for HTTPS ===
+    # Add security headers when using reverse proxy
     labels:
       - net.unraid.docker.webui=http://[IP]:[PORT:5984]/_utils # for some reason this does not work properly
       - net.unraid.docker.icon=https://couchdb.apache.org/image/couch@2x.png
       - net.unraid.docker.shell=bash
+      # Traefik labels (if using Traefik as reverse proxy instead of direct Cloudflare)
+      - traefik.enable=true
+      - traefik.http.routers.couchdb.rule=Host(`couchdb.yourdomain.com`)
+      - traefik.http.routers.couchdb.tls.certresolver=cloudflare
+      - traefik.http.services.couchdb.loadbalancer.server.port=5984
+      # Security headers for HTTPS
+      - traefik.http.middlewares.couchdb-headers.headers.customrequestheaders.X-Forwarded-Proto=https
+      - traefik.http.middlewares.couchdb-headers.headers.customrequestheaders.X-Forwarded-Port=443
+      - traefik.http.routers.couchdb.middlewares=couchdb-headers
+
+  # === Reverse Proxy Container ===
+  # Nginx reverse proxy for HTTPS termination and domain routing
+  nginx-proxy:
+    container_name: couchdb-nginx-proxy
+    image: nginx:alpine
+    ports:
+      - "80:80"    # HTTP port - redirects to HTTPS
+      - "443:443"  # HTTPS port - terminates SSL and proxies to CouchDB
+    volumes:
+      # Main nginx configuration file
+      - /mnt/user/appdata/couchdb-obsidian-livesync/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL certificates directory (if using custom certs instead of Cloudflare)
+      - /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl:/etc/nginx/ssl:ro
+      # Optional: Custom error pages
+      - /mnt/user/appdata/couchdb-obsidian-livesync/nginx/html:/usr/share/nginx/html:ro
+    environment:
+      # Nginx configuration through environment variables
+      - NGINX_HOST=${COUCHDB_DOMAIN:-couchdb.yourdomain.com}
+      - NGINX_PORT=80
+      - TZ=${TZ:-Asia/Shanghai}
+    depends_on:
+      - couchdb-obsidian-livesync
+    restart: unless-stopped
+    labels:
+      - net.unraid.docker.webui=https://[IP]:[PORT:443]
+      - net.unraid.docker.icon=https://raw.githubusercontent.com/NginxProxyManager/nginx-proxy-manager/develop/frontend/public/icon.png
+
+# === Network Configuration ===
+# Create custom network for better container communication
+networks:
+  default:
+    name: couchdb-network
+    driver: bridge
