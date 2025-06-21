@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Setup script for CouchDB Obsidian LiveSync with HTTPS support
+# Setup script for CouchDB Obsidian LiveSync with Cloudflare SSL support
 # This script creates the necessary directory structure and configuration files
 
 set -e  # Exit on any error
@@ -14,8 +14,8 @@ echo "🚀 Setting up CouchDB Obsidian LiveSync directory structure..."
 echo "📁 Creating directories..."
 mkdir -p "$BASE_DIR/data"
 mkdir -p "$BASE_DIR/etc/local.d"
-mkdir -p "$BASE_DIR/nginx/ssl"
 mkdir -p "$BASE_DIR/nginx/html"
+# Note: Not creating nginx/ssl directory since we're using Cloudflare for SSL
 
 # Set proper permissions
 echo "🔧 Setting permissions..."
@@ -57,84 +57,57 @@ port = 5984
 ; Admin users will be set via environment variables
 EOF
 
-# Create nginx configuration
-echo "🌐 Creating Nginx configuration..."
+# Create nginx configuration for Cloudflare SSL termination
+echo "🌐 Creating Nginx configuration for Cloudflare SSL..."
 cat > "$BASE_DIR/nginx/nginx.conf" << 'EOF'
-user nginx;
-worker_processes auto;
-error_log /var/log/nginx/error.log warn;
-pid /var/run/nginx.pid;
-
 events {
     worker_connections 1024;
 }
 
 http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
     
-    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
-                    '$status $body_bytes_sent "$http_referer" '
-                    '"$http_user_agent" "$http_x_forwarded_for"';
-    
-    access_log /var/log/nginx/access.log main;
-    
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 65;
-    types_hash_max_size 2048;
+    # Logging
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
     
     # Gzip compression
     gzip on;
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types
-        text/plain
-        text/css
-        text/xml
-        text/javascript
-        application/json
-        application/javascript
-        application/xml+rss
-        application/atom+xml;
-
-    # Rate limiting
-    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    gzip_types text/plain application/json;
     
     # Upstream CouchDB
     upstream couchdb {
         server couchdb-obsidian-livesync:5984;
     }
     
-    # HTTP to HTTPS redirect
+    # Main server - HTTP only (Cloudflare handles SSL termination)
     server {
         listen 80;
-        server_name _;
-        return 301 https://$host$request_uri;
-    }
-    
-    # HTTPS server
-    server {
-        listen 443 ssl http2;
-        server_name localhost;
+        server_name ${COUCHDB_DOMAIN:-couchdb.yourdomain.com};
         
-        # SSL configuration (self-signed for development)
-        ssl_certificate /etc/nginx/ssl/cert.pem;
-        ssl_certificate_key /etc/nginx/ssl/key.pem;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384;
-        ssl_prefer_server_ciphers off;
+        # Trust Cloudflare's forwarded headers
+        real_ip_header CF-Connecting-IP;
+        set_real_ip_from 173.245.48.0/20;
+        set_real_ip_from 103.21.244.0/22;
+        set_real_ip_from 103.22.200.0/22;
+        set_real_ip_from 103.31.4.0/22;
+        set_real_ip_from 141.101.64.0/18;
+        set_real_ip_from 108.162.192.0/18;
+        set_real_ip_from 190.93.240.0/20;
+        set_real_ip_from 188.114.96.0/20;
+        set_real_ip_from 197.234.240.0/22;
+        set_real_ip_from 198.41.128.0/17;
+        set_real_ip_from 162.158.0.0/15;
+        set_real_ip_from 104.16.0.0/13;
+        set_real_ip_from 104.24.0.0/14;
+        set_real_ip_from 172.64.0.0/13;
+        set_real_ip_from 131.0.72.0/22;
         
         # Security headers
         add_header X-Frame-Options DENY;
         add_header X-Content-Type-Options nosniff;
         add_header X-XSS-Protection "1; mode=block";
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        
-        # Rate limiting
-        limit_req zone=api burst=20 nodelay;
         
         # Proxy to CouchDB
         location / {
@@ -142,74 +115,33 @@ http {
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Port $server_port;
+            proxy_set_header X-Forwarded-Proto https;  # Always https since Cloudflare handles SSL
+            proxy_set_header X-Forwarded-Port 443;
             
-            # WebSocket support
+            # CouchDB specific settings
+            proxy_buffering off;
+            proxy_request_buffering off;
+            
+            # Handle WebSocket connections for real-time sync
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             
-            # Timeouts
-            proxy_connect_timeout 30s;
-            proxy_send_timeout 30s;
-            proxy_read_timeout 30s;
-            
-            # Buffer settings
-            proxy_buffering on;
-            proxy_buffer_size 4k;
-            proxy_buffers 8 4k;
+            # Increase timeouts for large database operations
+            proxy_connect_timeout 60s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
         }
         
         # Health check endpoint
         location /_health {
             access_log off;
-            return 200 "healthy\n";
+            return 200 "OK\n";
             add_header Content-Type text/plain;
         }
     }
 }
 EOF
-
-# Check for existing SSL certificates or create self-signed ones
-echo "🔒 Checking SSL certificates..."
-if [ -f "$BASE_DIR/nginx/ssl/cert.pem" ] && [ -f "$BASE_DIR/nginx/ssl/key.pem" ]; then
-    echo "✅ SSL certificates already exist - using existing certificates"
-    echo "📝 Certificate: $BASE_DIR/nginx/ssl/cert.pem"
-    echo "🔑 Private key: $BASE_DIR/nginx/ssl/key.pem"
-    
-    # Verify certificate validity
-    if openssl x509 -in "$BASE_DIR/nginx/ssl/cert.pem" -noout -checkend 86400 2>/dev/null; then
-        echo "✅ Certificate is valid and not expiring within 24 hours"
-    else
-        echo "⚠️ Certificate may be expired or expiring soon"
-        echo "💡 Consider renewing your SSL certificate"
-    fi
-else
-    echo "📝 SSL certificates not found, creating self-signed certificate for development..."
-    
-    # Create self-signed SSL certificate
-    if command -v openssl >/dev/null 2>&1; then
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout "$BASE_DIR/nginx/ssl/key.pem" \
-            -out "$BASE_DIR/nginx/ssl/cert.pem" \
-            -subj "/C=US/ST=State/L=City/O=Organization/CN=$NGINX_DOMAIN" \
-            2>/dev/null && {
-                echo "✅ Self-signed SSL certificate created successfully"
-                echo "⚠️ This is a self-signed certificate - browsers will show security warnings"
-                echo "💡 For production, replace with certificates from a trusted CA"
-            } || {
-                echo "❌ Failed to create SSL certificate"
-                exit 1
-            }
-    else
-        echo "❌ OpenSSL not found. Cannot create SSL certificates."
-        echo "📝 Please install OpenSSL or manually provide SSL certificates:"
-        echo "   • Certificate: $BASE_DIR/nginx/ssl/cert.pem"
-        echo "   • Private key: $BASE_DIR/nginx/ssl/key.pem"
-        exit 1
-    fi
-fi
 
 # Create nginx HTML files
 echo "📄 Creating default HTML files..."
@@ -267,7 +199,6 @@ echo "🔐 Setting final permissions..."
 chmod 644 "$BASE_DIR/etc/local.ini"
 chmod 644 "$BASE_DIR/nginx/nginx.conf"
 chmod -R 644 "$BASE_DIR/nginx/html/"
-chmod 600 "$BASE_DIR/nginx/ssl/"*.pem 2>/dev/null || true
 
 echo "✅ Setup complete!"
 echo ""
@@ -279,31 +210,19 @@ echo "   │   ├── local.d/          (CouchDB config directory)"
 echo "   │   └── local.ini         (CouchDB main config)"
 echo "   └── nginx/"
 echo "       ├── nginx.conf        (Nginx configuration)"
-echo "       ├── ssl/              (SSL certificates)"
 echo "       └── html/             (Static HTML files)"
 echo ""
 echo "🚀 You can now run: docker compose up -d"
 echo ""
 echo "⚠️  IMPORTANT NOTES:"
 echo "   • Update COUCHDB_DOMAIN in your .env file with your actual domain"
-if [ -f "$BASE_DIR/nginx/ssl/cert.pem" ] && [ -f "$BASE_DIR/nginx/ssl/key.pem" ]; then
-    if openssl x509 -in "$BASE_DIR/nginx/ssl/cert.pem" -noout -issuer 2>/dev/null | grep -q "O=Organization"; then
-        echo "   • Replace self-signed certificates with real ones for production"
-        echo "   • For Let's Encrypt: certbot --nginx -d your-domain.com"
-        echo "   • Or manually place cert.pem and key.pem in $BASE_DIR/nginx/ssl/"
-    else
-        echo "   • SSL certificates detected - ensure they're valid for your domain"
-        echo "   • Certificates will be automatically used by Nginx"
-    fi
-else
-    echo "   • SSL certificates not found - HTTPS will not work"
-    echo "   • Place cert.pem and key.pem in $BASE_DIR/nginx/ssl/ and re-run this script"
-fi
-echo "   • Configure your firewall to allow ports 80 and 443"
-echo "   • Set up DNS to point your domain to this server"
+echo "   • Configure Cloudflare SSL/TLS mode to 'Full' or 'Full (strict)'"
+echo "   • Point your Cloudflare DNS to your server's IP address"
+echo "   • Ensure your firewall allows inbound port 80"
+echo "   • SSL termination is handled by Cloudflare (no local certificates needed)"
 echo ""
-echo "🔧 SSL Certificate Management:"
-echo "   • To use existing certificates: Place them in $BASE_DIR/nginx/ssl/"
-echo "   • Certificate file: cert.pem (or fullchain.pem for Let's Encrypt)"
-echo "   • Private key file: key.pem (or privkey.pem for Let's Encrypt)"
-echo "   • Script will automatically detect and use existing certificates"
+echo "🌐 Cloudflare Configuration:"
+echo "   • SSL/TLS Mode: Full (recommended) or Full (strict)"
+echo "   • Origin Server: Point to your_server_ip:80"
+echo "   • Always Use HTTPS: Enable"
+echo "   • Edge Certificates: Auto (handled by Cloudflare)"

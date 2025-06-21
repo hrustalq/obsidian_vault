@@ -16,7 +16,7 @@ setup: ## Set up environment file from example
 PUID=99; \
 PGID=100; \
 UMASK=0022; \
-TZ=Asia/Shanghai; \
+TZ=UTC; \
 COUCHDB_USER=obsidian_user; \
 COUCHDB_PASSWORD=your_secure_password_here; \
 COUCHDB_CORS_ORIGINS=*; \
@@ -25,6 +25,9 @@ EOF; \
 			echo "Created .env file with default values"; \
 		fi; \
 		echo "Please edit .env file with your configuration"; \
+		echo "⚠️  For production with Cloudflare:"; \
+		echo "   • Set COUCHDB_DOMAIN to your actual domain"; \
+		echo "   • Configure Cloudflare SSL/TLS mode to 'Full'"; \
 	else \
 		echo ".env file already exists"; \
 	fi
@@ -52,6 +55,7 @@ up: check setup-dirs ## Start the Obsidian CouchDB service
 	@echo "🚀 Obsidian CouchDB is starting..."
 	@echo "📝 CouchDB will be available at: http://localhost:5984"
 	@echo "🔧 CouchDB Admin UI: http://localhost:5984/_utils"
+	@echo "🌐 Note: SSL termination handled by Cloudflare (if configured)"
 
 down: ## Stop the Obsidian CouchDB service
 	docker compose down
@@ -143,6 +147,11 @@ debug: ## Quick 502 troubleshooting (run when getting Bad Gateway)
 	@echo ""
 	@echo "--- Nginx Logs ---"
 	@docker compose logs nginx-proxy --tail=10 2>/dev/null || echo "No Nginx logs available"
+	@echo ""
+	@echo "🌐 Cloudflare SSL Notes:"
+	@echo "   • Ensure Cloudflare SSL/TLS mode is set to 'Full' or 'Full (strict)'"
+	@echo "   • Verify DNS points to your server's IP"
+	@echo "   • Check firewall allows port 80"
 	@echo ""
 	@echo "💡 Next steps: Check troubleshoot-502.md for detailed debugging"
 
