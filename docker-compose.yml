@@ -55,13 +55,12 @@ services:
     container_name: couchdb-nginx-proxy
     image: nginx:alpine
     ports:
-      - "80:80"    # HTTP port - redirects to HTTPS
-      - "443:443"  # HTTPS port - terminates SSL and proxies to CouchDB
+      - "80:80"    # HTTP port - Cloudflare handles HTTPS termination
     volumes:
       # Main nginx configuration file
       - /mnt/user/appdata/couchdb-obsidian-livesync/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # SSL certificates directory (if using custom certs instead of Cloudflare)
-      - /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl:/etc/nginx/ssl:ro
+      # SSL certificates directory (not needed with Cloudflare)
+      # - /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl:/etc/nginx/ssl:ro
       # Optional: Custom error pages
       - /mnt/user/appdata/couchdb-obsidian-livesync/nginx/html:/usr/share/nginx/html:ro
     environment:
