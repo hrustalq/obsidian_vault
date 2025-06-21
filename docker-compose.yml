@@ -1,0 +1,22 @@
+  couchdb-obsidian-livesync:
+    container_name: obsidian-livesync #shortened name
+    image: couchdb:3.3.3
+    env_file:
+      - .env
+    environment:
+      - PUID=${PUID:-99}
+      - PGID=${PGID:-100}
+      - UMASK=${UMASK:-0022}
+      - TZ=${TZ:-America/New_York}
+      - COUCHDB_USER=${COUCHDB_USER:-obsidian_user}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
+    volumes:
+      - /mnt/user/appdata/couchdb-obsidian-livesync/data:/opt/couchdb/data
+      - /mnt/user/appdata/couchdb-obsidian-livesync/etc/local.d:/opt/couchdb/etc/local.d
+    ports:
+      - "5984:5984"
+    restart: unless-stopped
+    labels:
+      - net.unraid.docker.webui=http://[IP]:[PORT:5984]/_utils # for some reason this does not work properly
+      - net.unraid.docker.icon=https://couchdb.apache.org/image/couch@2x.png
+      - net.unraid.docker.shell=bash
