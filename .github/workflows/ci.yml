@@ -18,27 +18,24 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
+    - name: Create test environment file
+      run: |
+        cat > .env << EOF
+        PUID=1000
+        PGID=1000
+        UMASK=0022
+        TZ=UTC
+        COUCHDB_USER=test_user
+        COUCHDB_PASSWORD=test_password
+        EOF
+      
     - name: Validate Docker Compose file
-      env:
-        PUID: 1000
-        PGID: 1000
-        UMASK: 0022
-        TZ: UTC
-        COUCHDB_USER: test_user
-        COUCHDB_PASSWORD: test_password
       run: docker compose config
       
     - name: Pull Docker images
       run: docker compose pull
       
     - name: Test Docker Compose setup
-      env:
-        PUID: 1000
-        PGID: 1000
-        UMASK: 0022
-        TZ: UTC
-        COUCHDB_USER: test_user
-        COUCHDB_PASSWORD: test_password
       run: |
         docker compose up -d
         sleep 30
