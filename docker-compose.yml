@@ -16,7 +16,7 @@ services:
       # Bind to all interfaces (0.0.0.0) to allow external connections through reverse proxy
       - COUCHDB_BIND_ADDRESS=0.0.0.0
       # Enable CORS for web applications accessing CouchDB through your domain
-      - COUCHDB_CORS_ENABLE=true
+      - COUCHDB_CORS_ENABLE=false
       # Set allowed CORS origins from environment variable
       - COUCHDB_CORS_ORIGINS=${COUCHDB_CORS_ORIGINS:-https://couchdb.yourdomain.com,https://yourdomain.com}
       # Enable authentication (required for security when exposing to internet)
