@@ -39,6 +39,66 @@ jobs:
         COUCHDB_CORS_ORIGINS=*
         COUCHDB_DOMAIN=localhost
         EOF
+        
+    - name: Create required directories for CI testing
+      run: |
+        # Create directory structure for CI testing
+        sudo mkdir -p /mnt/user/appdata/couchdb-obsidian-livesync/{data,etc/local.d,nginx/ssl,nginx/html}
+        
+        # Create minimal local.ini for testing
+        sudo tee /mnt/user/appdata/couchdb-obsidian-livesync/etc/local.ini > /dev/null << 'EOF'
+        [couchdb]
+        single_node=true
+        
+        [httpd]
+        enable_cors = true
+        bind_address = 0.0.0.0
+        port = 5984
+        
+        [cors]
+        origins = *
+        credentials = true
+        methods = GET, PUT, POST, HEAD, DELETE
+        headers = accept, authorization, content-type, origin, referer, x-csrf-token
+        
+        [chttpd]
+        require_valid_user = false
+        bind_address = 0.0.0.0
+        port = 5984
+        EOF
+        
+        # Create minimal nginx config for testing
+        sudo tee /mnt/user/appdata/couchdb-obsidian-livesync/nginx/nginx.conf > /dev/null << 'EOF'
+        events {
+            worker_connections 1024;
+        }
+        http {
+            upstream couchdb {
+                server couchdb-obsidian-livesync:5984;
+            }
+            server {
+                listen 80;
+                location / {
+                    proxy_pass http://couchdb;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+            }
+        }
+        EOF
+        
+        # Create self-signed certificates for CI testing
+        sudo openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
+          -keyout /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl/key.pem \
+          -out /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl/cert.pem \
+          -subj "/C=US/ST=Test/L=Test/O=Test/CN=localhost"
+        
+        # Set permissions
+        sudo chmod -R 755 /mnt/user/appdata/couchdb-obsidian-livesync/
+        sudo chmod 644 /mnt/user/appdata/couchdb-obsidian-livesync/etc/local.ini
+        sudo chmod 644 /mnt/user/appdata/couchdb-obsidian-livesync/nginx/nginx.conf
       
     - name: Validate Docker Compose file
       run: docker compose config
