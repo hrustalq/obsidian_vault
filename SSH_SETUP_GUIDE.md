@@ -109,7 +109,27 @@ b3BlbnNzaC1rZXktdjEAAAA...
 -----END OPENSSH PRIVATE KEY-----
 ```
 
-### 4. Optional Environment Secrets
+### 4. SSL Certificate Secrets (Optional but Recommended)
+
+For HTTPS support, add your SSL certificates:
+
+| Secret Name | Content | How to Get |
+|-------------|---------|------------|
+| `SSL_CERT` | Full certificate content | `cat /path/to/certificate.crt` |
+| `SSL_KEY` | Private key content | `cat /path/to/private.key` |
+
+**For Let's Encrypt users:**
+```bash
+# Copy certificate content
+cat /etc/letsencrypt/live/yourdomain.com/fullchain.pem
+
+# Copy private key content  
+cat /etc/letsencrypt/live/yourdomain.com/privkey.pem
+```
+
+**Important:** Include the full content with headers like `-----BEGIN CERTIFICATE-----`
+
+### 5. Other Optional Environment Secrets
 
 Add these if you want to override defaults:
 - `COUCHDB_PASSWORD` (required)

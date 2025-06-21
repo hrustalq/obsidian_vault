@@ -108,6 +108,8 @@ For automated deployment to your server, you'll need to set up SSH keys and conf
 | `SSH_KEY` | Private SSH key content | Full private key with headers |
 | `DEPLOY_PATH` | Path where app is deployed | `/home/user/obsidian_vault` |
 | `COUCHDB_PASSWORD` | Database password | `secure_password_123` |
+| `SSL_CERT` | SSL certificate content | Full certificate with headers |
+| `SSL_KEY` | SSL private key content | Full private key with headers |
 
 #### Optional Secrets (with defaults)
 
@@ -121,6 +123,41 @@ For automated deployment to your server, you'll need to set up SSH keys and conf
 | `PGID` | `100` | Process Group ID |
 | `UMASK` | `0022` | File creation mask |
 | `TZ` | `Asia/Shanghai` | Timezone |
+
+### SSL Certificate Management via GitHub Secrets
+
+You can store your SSL certificates securely in GitHub repository secrets for automated deployment:
+
+#### How to Set Up SSL Certificate Secrets
+
+1. **Get your SSL certificate files** (from Let's Encrypt, CA, or self-signed)
+2. **Copy certificate content:**
+   ```bash
+   # For the SSL_CERT secret, copy the full certificate content:
+   cat /path/to/your/certificate.crt
+   # or for Let's Encrypt:
+   cat /etc/letsencrypt/live/yourdomain.com/fullchain.pem
+   ```
+
+3. **Copy private key content:**
+   ```bash
+   # For the SSL_KEY secret, copy the full private key content:
+   cat /path/to/your/private.key
+   # or for Let's Encrypt:
+   cat /etc/letsencrypt/live/yourdomain.com/privkey.pem
+   ```
+
+4. **Add to GitHub repository secrets:**
+   - Go to `Settings > Secrets and variables > Actions`
+   - Add `SSL_CERT` with the certificate content (including `-----BEGIN CERTIFICATE-----` headers)
+   - Add `SSL_KEY` with the private key content (including `-----BEGIN PRIVATE KEY-----` headers)
+
+#### Benefits of Using GitHub Secrets for SSL
+
+- **🔒 Secure Storage**: Certificates are encrypted and never exposed in logs
+- **🚀 Automated Deployment**: Certificates are automatically installed during deployment
+- **🔄 Easy Updates**: Update certificates by changing secrets (no server access needed)
+- **📝 Version Control**: No need to store sensitive certificates in your repository
 
 ### Deployment Workflow
 

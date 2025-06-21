@@ -187,6 +187,19 @@ jobs:
           # Run setup script to create directories and config files
           echo "📁 Setting up directory structure and configuration..."
           chmod +x setup-directories.sh
+          
+          # Create SSL certificates from secrets if provided
+          if [ -n "${{ secrets.SSL_CERT }}" ] && [ -n "${{ secrets.SSL_KEY }}" ]; then
+            echo "🔒 Installing SSL certificates from GitHub secrets..."
+            mkdir -p /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl
+            echo "${{ secrets.SSL_CERT }}" > /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl/cert.pem
+            echo "${{ secrets.SSL_KEY }}" > /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl/key.pem
+            chmod 600 /mnt/user/appdata/couchdb-obsidian-livesync/nginx/ssl/*.pem
+            echo "✅ SSL certificates installed from secrets"
+          else
+            echo "📝 No SSL certificates in secrets - setup script will handle certificate creation"
+          fi
+          
           ./setup-directories.sh
           
           # Export environment variables

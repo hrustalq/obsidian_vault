@@ -171,17 +171,44 @@ http {
 }
 EOF
 
-# Create self-signed SSL certificate for development
-echo "🔒 Creating self-signed SSL certificate..."
-if [ ! -f "$BASE_DIR/nginx/ssl/cert.pem" ] || [ ! -f "$BASE_DIR/nginx/ssl/key.pem" ]; then
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout "$BASE_DIR/nginx/ssl/key.pem" \
-        -out "$BASE_DIR/nginx/ssl/cert.pem" \
-        -subj "/C=US/ST=State/L=City/O=Organization/CN=$NGINX_DOMAIN" \
-        2>/dev/null || {
-            echo "⚠️ OpenSSL not found. You'll need to provide SSL certificates manually."
-            echo "📝 Create cert.pem and key.pem in $BASE_DIR/nginx/ssl/"
-        }
+# Check for existing SSL certificates or create self-signed ones
+echo "🔒 Checking SSL certificates..."
+if [ -f "$BASE_DIR/nginx/ssl/cert.pem" ] && [ -f "$BASE_DIR/nginx/ssl/key.pem" ]; then
+    echo "✅ SSL certificates already exist - using existing certificates"
+    echo "📝 Certificate: $BASE_DIR/nginx/ssl/cert.pem"
+    echo "🔑 Private key: $BASE_DIR/nginx/ssl/key.pem"
+    
+    # Verify certificate validity
+    if openssl x509 -in "$BASE_DIR/nginx/ssl/cert.pem" -noout -checkend 86400 2>/dev/null; then
+        echo "✅ Certificate is valid and not expiring within 24 hours"
+    else
+        echo "⚠️ Certificate may be expired or expiring soon"
+        echo "💡 Consider renewing your SSL certificate"
+    fi
+else
+    echo "📝 SSL certificates not found, creating self-signed certificate for development..."
+    
+    # Create self-signed SSL certificate
+    if command -v openssl >/dev/null 2>&1; then
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$BASE_DIR/nginx/ssl/key.pem" \
+            -out "$BASE_DIR/nginx/ssl/cert.pem" \
+            -subj "/C=US/ST=State/L=City/O=Organization/CN=$NGINX_DOMAIN" \
+            2>/dev/null && {
+                echo "✅ Self-signed SSL certificate created successfully"
+                echo "⚠️ This is a self-signed certificate - browsers will show security warnings"
+                echo "💡 For production, replace with certificates from a trusted CA"
+            } || {
+                echo "❌ Failed to create SSL certificate"
+                exit 1
+            }
+    else
+        echo "❌ OpenSSL not found. Cannot create SSL certificates."
+        echo "📝 Please install OpenSSL or manually provide SSL certificates:"
+        echo "   • Certificate: $BASE_DIR/nginx/ssl/cert.pem"
+        echo "   • Private key: $BASE_DIR/nginx/ssl/key.pem"
+        exit 1
+    fi
 fi
 
 # Create nginx HTML files
@@ -259,6 +286,24 @@ echo "🚀 You can now run: docker compose up -d"
 echo ""
 echo "⚠️  IMPORTANT NOTES:"
 echo "   • Update COUCHDB_DOMAIN in your .env file with your actual domain"
-echo "   • Replace self-signed certificates with real ones for production"
+if [ -f "$BASE_DIR/nginx/ssl/cert.pem" ] && [ -f "$BASE_DIR/nginx/ssl/key.pem" ]; then
+    if openssl x509 -in "$BASE_DIR/nginx/ssl/cert.pem" -noout -issuer 2>/dev/null | grep -q "O=Organization"; then
+        echo "   • Replace self-signed certificates with real ones for production"
+        echo "   • For Let's Encrypt: certbot --nginx -d your-domain.com"
+        echo "   • Or manually place cert.pem and key.pem in $BASE_DIR/nginx/ssl/"
+    else
+        echo "   • SSL certificates detected - ensure they're valid for your domain"
+        echo "   • Certificates will be automatically used by Nginx"
+    fi
+else
+    echo "   • SSL certificates not found - HTTPS will not work"
+    echo "   • Place cert.pem and key.pem in $BASE_DIR/nginx/ssl/ and re-run this script"
+fi
 echo "   • Configure your firewall to allow ports 80 and 443"
 echo "   • Set up DNS to point your domain to this server"
+echo ""
+echo "🔧 SSL Certificate Management:"
+echo "   • To use existing certificates: Place them in $BASE_DIR/nginx/ssl/"
+echo "   • Certificate file: cert.pem (or fullchain.pem for Let's Encrypt)"
+echo "   • Private key file: key.pem (or privkey.pem for Let's Encrypt)"
+echo "   • Script will automatically detect and use existing certificates"
