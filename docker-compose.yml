@@ -1,3 +1,4 @@
+services:
   couchdb-obsidian-livesync:
     container_name: obsidian-livesync #shortened name
     image: couchdb:3.3.3
