@@ -29,13 +29,13 @@ EOF; \
 		echo ".env file already exists"; \
 	fi
 
-check: ## Check if environment file exists and validate docker-compose
+check: ## Check if environment file exists and validate docker compose
 	@if [ ! -f .env ]; then \
 		echo "❌ .env file not found! Run 'make setup' first"; \
 		exit 1; \
 	fi
 	@echo "✅ .env file exists"
-	@docker-compose config --quiet && echo "✅ Docker Compose configuration is valid"
+	@docker compose config --quiet && echo "✅ Docker Compose configuration is valid"
 
 setup-dirs: ## Create required directories and configuration files
 	@echo "📁 Setting up directory structure..."
@@ -48,21 +48,21 @@ setup-dirs: ## Create required directories and configuration files
 	fi
 
 up: check setup-dirs ## Start the Obsidian CouchDB service
-	docker-compose up -d
+	docker compose up -d
 	@echo "🚀 Obsidian CouchDB is starting..."
 	@echo "📝 CouchDB will be available at: http://localhost:5984"
 	@echo "🔧 CouchDB Admin UI: http://localhost:5984/_utils"
 
 down: ## Stop the Obsidian CouchDB service
-	docker-compose down
+	docker compose down
 	@echo "🛑 Obsidian CouchDB stopped"
 
 restart: ## Restart the Obsidian CouchDB service
-	docker-compose restart
+	docker compose restart
 	@echo "🔄 Obsidian CouchDB restarted"
 
 logs: ## Show logs from the CouchDB service
-	docker-compose logs -f couchdb-obsidian-livesync
+	docker compose logs -f couchdb-obsidian-livesync
 
 shell: ## Open shell in the CouchDB container
 	docker exec -it obsidian-livesync bash
@@ -76,7 +76,7 @@ health: ## Check the health of CouchDB service
 clean: ## Remove containers and volumes (WARNING: This will delete data!)
 	@echo "⚠️  This will remove all containers and volumes, including data!"
 	@read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
-	docker-compose down -v --remove-orphans
+	docker compose down -v --remove-orphans
 	docker system prune -f
 	@echo "🧹 Cleanup completed"
 
@@ -98,25 +98,25 @@ restore: ## Restore CouchDB data from backup
 	if [ -f "backups/$$backup_file" ]; then \
 		echo "⚠️  This will replace current data!"; \
 		read -p "Are you sure? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1; \
-		docker-compose down; \
+		docker compose down; \
 		docker run --rm \
 			-v obsidian_vault_couchdb-obsidian-livesync_data:/target \
 			-v $(PWD)/backups:/backup \
 			alpine sh -c "rm -rf /target/* && tar xzf /backup/$$backup_file -C /target"; \
-		docker-compose up -d; \
+		docker compose up -d; \
 		echo "✅ Restore completed"; \
 	else \
 		echo "❌ Backup file not found"; \
 	fi
 
 update: ## Pull latest CouchDB image and restart
-	docker-compose pull
-	docker-compose up -d
+	docker compose pull
+	docker compose up -d
 	@echo "🔄 Updated to latest CouchDB image"
 
 dev: ## Development mode - start with logs
-	docker-compose up
+	docker compose up
 
 status: ## Show service status
 	@echo "📊 Service Status:"
-	@docker-compose ps 
+	@docker compose ps 
