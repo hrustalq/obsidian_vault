@@ -28,8 +28,6 @@ services:
     volumes:
       - /mnt/user/appdata/couchdb-obsidian-livesync/data:/opt/couchdb/data
       - /mnt/user/appdata/couchdb-obsidian-livesync/etc/local.d:/opt/couchdb/etc/local.d
-      # Mount custom configuration file for additional HTTPS/domain settings
-      - /mnt/user/appdata/couchdb-obsidian-livesync/etc/local.ini:/opt/couchdb/etc/local.ini
     ports:
       - "5984:5984"  # CouchDB HTTP port - will be proxied through Cloudflare
     restart: unless-stopped
