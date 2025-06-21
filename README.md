@@ -44,7 +44,7 @@ Create a `.env` file with these variables:
 | PUID | number | Process ID | 99 |
 | PGID | number | PG ID | 100 |
 | UMASK | number | UMASK | 0022 |
-| TZ | string | Time zone | America/New_York |
+| TZ | string | Time zone | Asia/Shanghai |
 | COUCHDB_USER | string | Database username | obsidian_user |
 | COUCHDB_PASSWORD | string | Database password | your_secure_password |
 
@@ -57,13 +57,21 @@ The project includes CI/CD workflows that:
 
 ### GitHub Secrets Configuration
 
-For automated deployment, configure these repository secrets:
-- `COUCHDB_PASSWORD` (required)
-- `COUCHDB_USER` (optional, defaults to obsidian_user)
-- `PUID` (optional, defaults to 99)
-- `PGID` (optional, defaults to 100)
-- `UMASK` (optional, defaults to 0022)
-- `TZ` (optional, defaults to America/New_York)
+For automated deployment to your server, you'll need to set up SSH keys and configure secrets.
+
+**📖 [Complete SSH Setup Guide](./SSH_SETUP_GUIDE.md)**
+
+**Required secrets for deployment:**
+- `SSH_HOST` - Your server IP address
+- `SSH_USERNAME` - SSH username on your server
+- `SSH_KEY` - Private SSH key content
+- `DEPLOY_PATH` - Path where the app is deployed
+- `COUCHDB_PASSWORD` - Database password
+
+**Optional secrets (have defaults):**
+- `COUCHDB_USER` (defaults to obsidian_user)
+- `SSH_PORT` (defaults to 22)
+- `PUID`, `PGID`, `UMASK`, `TZ` (system defaults)
 
 ## Data Persistence
 

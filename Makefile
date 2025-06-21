@@ -16,7 +16,7 @@ setup: ## Set up environment file from example
 PUID=99; \
 PGID=100; \
 UMASK=0022; \
-TZ=America/New_York; \
+TZ=Asia/Shanghai; \
 COUCHDB_USER=obsidian_user; \
 COUCHDB_PASSWORD=your_secure_password_here; \
 EOF; \

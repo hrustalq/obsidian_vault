@@ -26,10 +26,10 @@ jobs:
         TZ: UTC
         COUCHDB_USER: test_user
         COUCHDB_PASSWORD: test_password
-      run: docker-compose config
+      run: docker compose config
       
     - name: Pull Docker images
-      run: docker-compose pull
+      run: docker compose pull
       
     - name: Test Docker Compose setup
       env:
@@ -40,46 +40,81 @@ jobs:
         COUCHDB_USER: test_user
         COUCHDB_PASSWORD: test_password
       run: |
-        docker-compose up -d
+        docker compose up -d
         sleep 30
         curl -f http://localhost:5984 || exit 1
-        docker-compose logs
+        docker compose logs
         
     - name: Cleanup
       if: always()
-      run: docker-compose down -v
+      run: docker compose down -v
 
   deploy:
-    name: Deploy (Production)
+    name: Deploy to Server
     runs-on: ubuntu-latest
     needs: [validate, security]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.SSH_HOST != '' && secrets.COUCHDB_PASSWORD != ''
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Deploy with Docker Buildx
-      env:
-        PUID: ${{ secrets.PUID || '99' }}
-        PGID: ${{ secrets.PGID || '100' }}
-        UMASK: ${{ secrets.UMASK || '0022' }}
-        TZ: ${{ secrets.TZ || 'America/New_York' }}
-        COUCHDB_USER: ${{ secrets.COUCHDB_USER || 'obsidian_user' }}
-        COUCHDB_PASSWORD: ${{ secrets.COUCHDB_PASSWORD }}
-      run: |
-        if [ -z "$COUCHDB_PASSWORD" ]; then
-          echo "⚠️ COUCHDB_PASSWORD secret not set - skipping deployment"
-          exit 0
-        fi
-        echo "🚀 Deploying with environment variables from GitHub secrets"
-        docker-compose up -d
-        sleep 30
-        curl -f http://localhost:5984 || exit 1
-        echo "✅ Deployment successful"
+    - name: Deploy to Remote Server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.SSH_PORT || 22 }}
+        envs: PUID,PGID,UMASK,TZ,COUCHDB_USER,COUCHDB_PASSWORD
+        script: |
+          # Check if required secrets are set
+          if [ -z "${{ secrets.SSH_HOST }}" ] || [ -z "${{ secrets.SSH_USERNAME }}" ] || [ -z "${{ secrets.SSH_KEY }}" ]; then
+            echo "⚠️ SSH secrets not configured - skipping deployment"
+            echo "Please set SSH_HOST, SSH_USERNAME, and SSH_KEY secrets"
+            exit 0
+          fi
+          
+          if [ -z "${{ secrets.COUCHDB_PASSWORD }}" ]; then
+            echo "⚠️ COUCHDB_PASSWORD secret not set - skipping deployment"
+            exit 0
+          fi
+          
+          if [ -z "${{ secrets.DEPLOY_PATH }}" ]; then
+            echo "⚠️ DEPLOY_PATH secret not set - skipping deployment"
+            exit 0
+          fi
+          
+          echo "🚀 Deploying Obsidian CouchDB to server..."
+          
+          # Navigate to deployment directory
+          cd ${{ secrets.DEPLOY_PATH }}
+          
+          # Pull latest changes
+          git pull origin main
+          
+          # Export environment variables
+          export PUID="${{ secrets.PUID || '99' }}"
+          export PGID="${{ secrets.PGID || '100' }}"
+          export UMASK="${{ secrets.UMASK || '0022' }}"
+          export TZ="${{ secrets.TZ || 'Asia/Shanghai' }}"
+          export COUCHDB_USER="${{ secrets.COUCHDB_USER || 'obsidian_user' }}"
+          export COUCHDB_PASSWORD="${{ secrets.COUCHDB_PASSWORD }}"
+          
+          # Deploy using Makefile
+          make up
+          
+          # Wait for service to be ready
+          sleep 30
+          
+          # Health check
+          if curl -f http://localhost:5984 >/dev/null 2>&1; then
+            echo "✅ Deployment successful - CouchDB is responding"
+          else
+            echo "❌ Deployment failed - CouchDB is not responding"
+            make logs
+            exit 1
+          fi
 
   security:
     name: Security Scan
