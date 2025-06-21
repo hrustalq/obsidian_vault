@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs shell health clean backup restore setup check
+.PHONY: help up down restart logs shell health clean backup restore setup check setup-dirs
 
 # Default target
 help: ## Show this help message
@@ -37,7 +37,17 @@ check: ## Check if environment file exists and validate docker-compose
 	@echo "✅ .env file exists"
 	@docker-compose config --quiet && echo "✅ Docker Compose configuration is valid"
 
-up: check ## Start the Obsidian CouchDB service
+setup-dirs: ## Create required directories and configuration files
+	@echo "📁 Setting up directory structure..."
+	@if [ -f setup-directories.sh ]; then \
+		chmod +x setup-directories.sh; \
+		./setup-directories.sh; \
+	else \
+		echo "❌ setup-directories.sh not found"; \
+		exit 1; \
+	fi
+
+up: check setup-dirs ## Start the Obsidian CouchDB service
 	docker-compose up -d
 	@echo "🚀 Obsidian CouchDB is starting..."
 	@echo "📝 CouchDB will be available at: http://localhost:5984"

@@ -124,6 +124,11 @@ jobs:
           # Pull latest changes
           git pull origin main
           
+          # Run setup script to create directories and config files
+          echo "📁 Setting up directory structure and configuration..."
+          chmod +x setup-directories.sh
+          ./setup-directories.sh
+          
           # Export environment variables
           export PUID="${{ secrets.PUID || '99' }}"
           export PGID="${{ secrets.PGID || '100' }}"
